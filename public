@@ -1,1 +1,69 @@
 public/index.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tic-Tac-Toe Live</title>
+<style>
+body{font-family:Arial,sans-serif;background:#111827;color:white;text-align:center;margin:0;padding:24px}
+main{max-width:500px;margin:25px auto;background:#1f2937;padding:24px;border-radius:18px}
+h1{color:#60a5fa}
+input,button{padding:12px;margin:6px;border:0;border-radius:8px;font-size:16px}
+button{cursor:pointer;background:#3b82f6;color:white}
+button:disabled{opacity:.45;cursor:not-allowed}
+#board{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:20px auto;max-width:330px}
+.cell{height:95px;font-size:42px;font-weight:bold;background:#374151}
+#status{min-height:28px;color:#fbbf24}
+#room{font-weight:bold;color:#93c5fd}
+</style>
+</head>
+<body>
+<main>
+<h1>⭕ Tic-Tac-Toe Live</h1>
+<p>Play a friend in real time!</p>
+<div id="setup">
+<button id="create">Create New Game</button>
+<p>Or join your friend's room:</p>
+<input id="roomInput" placeholder="Enter room code" maxlength="6">
+<button id="join">Join Game</button>
+</div>
+<p id="room"></p>
+<p id="status">Create a room or join one to begin.</p>
+<div id="board"></div>
+<p id="scores">X: 0 | O: 0 | Draws: 0</p>
+<button id="again" hidden>Play Next Round</button>
+<button id="leave" hidden>Leave Room</button>
+</main>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const socket=io();
+const $=id=>document.getElementById(id);
+let role=null,room=null,current=null;
+const board=$('board');
+for(let i=0;i<9;i++){
+ const b=document.createElement('button');
+ b.className='cell';b.setAttribute('aria-label','Square '+(i+1));
+ b.onclick=()=>{if(room&&current&&!current.winner&&current.turn===role&&current.players.X&&current.players.O&&!current.board[i])socket.emit('move',i)};
+ board.appendChild(b);
+}
+function message(t){$('status').textContent=t}
+function enter(r){room=r.id;role=r.role;$('room').textContent='Room: '+room+' | You are '+role;$('setup').hidden=true;$('leave').hidden=false;message('Waiting for opponent...')}
+$('create').onclick=()=>socket.emit('create',{},r=>{if(!r?.ok)return message('Could not create room.');enter(r)});
+$('join').onclick=()=>{const id=$('roomInput').value.trim();if(!id)return message('Enter a room code first.');socket.emit('join',id,r=>{if(!r?.ok)return message(r?.error||'Could not join room.');enter(r)})};
+socket.on('state',s=>{
+ current=s;
+ [...board.children].forEach((b,i)=>{b.textContent=s.board[i]||'';b.disabled=!!s.board[i]||!!s.winner||s.turn!==role||!s.players.X||!s.players.O});
+ $('scores').textContent='X: '+s.scores.X+' | O: '+s.scores.O+' | Draws: '+s.scores.draw;
+ $('again').hidden=!(s.winner&&s.players.X&&s.players.O);
+ if(!s.players.X||!s.players.O)message('Share the room code with your friend. Waiting for both players...');
+ else if(s.winner==='draw')message('It is a draw!');
+ else if(s.winner)message(s.winner+' wins this round!');
+ else message(s.turn===role?'Your turn ('+role+')':'Opponent\\'s turn');
+});
+$('again').onclick=()=>socket.emit('again');
+$('leave').onclick=()=>{socket.emit('leave');room=null;role=null;current=null;$('setup').hidden=false;$('leave').hidden=true;$('again').hidden=true;$('room').textContent='';message('You left the room.');[...board.children].forEach(b=>{b.textContent='';b.disabled=true})};
+socket.on('connect_error',()=>message('Connection problem. Refresh the page and try again.'));
+</script>
+</body>
+</html>
